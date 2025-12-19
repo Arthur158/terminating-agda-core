@@ -217,7 +217,7 @@ convertBranches r (BsCons bsh bst) bp =
 
 {-# COMPILE AGDA2HS convertBranches #-}
 
-convertWhnf : ⦃ fl : Fuel ⦄ → Singleton α → (t q : Term α) → TCM (t ≅ q)
+convertWhnf : {{ fl : Fuel }} → Singleton α → (t q : Term α) → TCM (t ≅ q)
 convertWhnf r (TVar x) (TVar y) = convVars x y
 convertWhnf r (TDef x) (TDef y) = convDefs x y
 convertWhnf r (TData d ps is) (TData e qs ks) = convDatas r d e ps qs is ks

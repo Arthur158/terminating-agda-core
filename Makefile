@@ -8,6 +8,7 @@ LIBRARIES =
 # also the order is silly, we redo a lot of the work because we don't know the dependencies
 alllib: lib \
   lib/Agda/Core/Prelude.hs \
+  lib/Agda/Core/Name.hs \
   lib/Agda/Core/GlobalScope.hs \
   lib/Agda/Core/Syntax/Strengthening.hs \
   lib/Agda/Core/Syntax/VarInTerm.hs \
@@ -18,7 +19,9 @@ alllib: lib \
   lib/Agda/Core/TCM/TCM.hs \
   lib/Agda/Core/TCM/Instances.hs \
   lib/Agda/Core/Checkers/Converter.hs \
-  lib/Agda/Core/Checkers/TypeCheck.hs
+  lib/Agda/Core/Checkers/TypeCheck.hs \
+  lib/Agda/Core/Checkers/Terminate.hs
+
 
 # alllib: lib lib/*.hs
 

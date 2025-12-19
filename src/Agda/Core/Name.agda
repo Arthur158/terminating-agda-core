@@ -49,13 +49,15 @@ opaque
   rScopeToRScopeNameInR [] = []
   rScopeToRScopeNameInR (Erased x ∷ s)  = Erased (⟨ x ⟩ inRHere) ∷ map (λ where (Erased (⟨ _ ⟩ t)) → Erased (⟨ _ ⟩ (inRThere t))) (rScopeToRScopeNameInR s)
 {-# COMPILE AGDA2HS rScopeToRScopeNameInR #-}
-
+ 
 private variable
   @0 α : Scope Name
 
 indexToNat : Index → Nat
-indexToNat Zero = zero
-indexToNat (Suc n) = suc (indexToNat n)
+indexToNat Zero = 0
+indexToNat (Suc n) = 1 + (indexToNat n)
+{-# COMPILE AGDA2HS indexToNat #-}
+
 
 natToIndex : Nat → Index
 natToIndex zero = Zero
@@ -64,6 +66,8 @@ natToIndex (suc n) = Suc (natToIndex n)
 instance
   iEqForIndex : Eq Index
   iEqForIndex ._==_  = λ n m → (indexToNat n) == (indexToNat m)
+  {-# COMPILE AGDA2HS iEqForIndex #-}
+
 
 instance
   iOrdFromLessThanIndex : OrdFromLessThan Index
