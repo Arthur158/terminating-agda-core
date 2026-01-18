@@ -8,8 +8,8 @@ MAlonzo
 *.agda#
 .#*.agda
 *~
-lib
 dist-newstyle
 result
 .direnv
+.stack-work
 src/**/*.hs

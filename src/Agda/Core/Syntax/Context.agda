@@ -45,7 +45,7 @@ pattern ⌈⌉ = EmptyTel
 infix 6 _∶_◂_
 pattern _∶_◂_ x t Δ = ExtendTel x t Δ
 
-{-# COMPILE AGDA2HS Telescope #-}
+{-# COMPILE AGDA2HS Telescope deriving Show #-}
 
 singTel : Telescope α rβ → Singleton rβ
 singTel ⌈⌉ = sing _

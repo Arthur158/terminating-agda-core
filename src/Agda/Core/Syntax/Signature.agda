@@ -35,7 +35,7 @@ record Constructor {@0 d : NameData} (@0 c : NameCon d) : Set where
   {-# COMPILE AGDA2HS instConIndTel inline #-}
 
 open Constructor public
-{-# COMPILE AGDA2HS Constructor #-}
+{-# COMPILE AGDA2HS Constructor deriving Show #-}
 
 instConIx : {@0 c : NameCon d} (con : Constructor c)
   → TermS α (dataParScope d) → TermS α (fieldScope c) → TermS α (dataIxScope d)
@@ -71,10 +71,10 @@ record Datatype (@0 d : NameData) : Set where
   {-# COMPILE AGDA2HS instDataIxTel inline #-}
 
 open Datatype public
-{-# COMPILE AGDA2HS Datatype #-}
+{-# COMPILE AGDA2HS Datatype deriving Show #-}
 
 ---------------------------------------------------------------------------------------------------
-                                          {- Signature -}
+                             {- Signature -}
 ---------------------------------------------------------------------------------------------------
 data SigDefinition : Set where
   FunctionDef : (funBody : Term mempty) → SigDefinition
@@ -119,7 +119,7 @@ data Defn : Set where
   FunctionDefn : (funBody : Term mempty) → Defn
   DatatypeDefn :  (@0 d : NameData) → Datatype d → Defn
   ConstructorDefn : (@0 d : NameData) (@0 c : NameCon d) → Constructor c → Defn
-{-# COMPILE AGDA2HS Defn #-}
+{-# COMPILE AGDA2HS Defn deriving Show #-}
 
 
 record Definition : Set where
@@ -129,4 +129,4 @@ record Definition : Set where
     defType : Type mempty
     theDef : Defn
 open Definition public
-{-# COMPILE AGDA2HS Definition #-}
+{-# COMPILE AGDA2HS Definition deriving Show #-}

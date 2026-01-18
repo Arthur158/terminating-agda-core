@@ -12,12 +12,12 @@ import Control.Monad (when)
 import Control.Monad.Reader (ReaderT, runReaderT, MonadReader, asks)
 import Control.Monad.Except (MonadError(throwError, catchError), withError)
 import Data.Functor ((<&>))
-import Data.Map.Strict (Map)
+import Data.Map.Strict (Map, foldrWithKey)
 import Numeric.Natural (Natural)
 
 import Agda.Syntax.Common ( Arg(unArg) )
 import Agda.Syntax.Abstract.Name (QName)
-import Agda.Syntax.Internal (lensSort, unDom, unEl)
+import Agda.Syntax.Internal (lensSort, unDom, unEl, DeBruijnPattern)
 import Agda.Syntax.Internal.Elim (allApplyElims)
 import Agda.Syntax.Common.Pretty ( Doc, Pretty(pretty), (<+>), nest, multiLineText )
 import Agda.TypeChecking.Substitute ()
@@ -29,6 +29,7 @@ import Agda.TypeChecking.Monad  qualified as I
 import Agda.Syntax.Internal     qualified as I
 import Agda.TypeChecking.Substitute qualified as I
 import Agda.TypeChecking.Telescope qualified as I
+import Agda.TypeChecking.CompiledClause qualified as CC
 
 
 import Agda.Core.Syntax.Term (Term(..), Sort(..))
@@ -36,11 +37,12 @@ import Agda.Core.Syntax.Term      qualified as Core
 import Agda.Core.Syntax.Context   qualified as Core
 import Agda.Core.Syntax.Signature qualified as Core
 
-import Agda.Core.UtilsH (listToUnitList, indexToNat, indexToInt)
+import Agda.Core.UtilsH (listToUnitList, indexToNat, indexToInt, intToIndex, numOfArgs)
 
 
 import Scope.In (Index)
 import Scope.In qualified as Scope
+import Scope.Core (rsingleton)
 import Agda.Utils.Either (maybeRight)
 import qualified Agda.Syntax.Common.Pretty as Pretty
 import System.IO (withBinaryFile)
@@ -59,6 +61,7 @@ tApp t (e:es) = TApp t e `tApp` es
 --   Constructors are stored with their datatype
 data ToCoreGlobal = ToCoreGlobal { globalDefs  :: Map QName Index,
                                    globalDatas :: Map QName Index,
+                                   -- indexedDatas :: Map Index Core.Datatype,
                                    globalCons  :: Map QName (Index, Index)}
 
 -- | Custom monad used for translating to core syntax.
@@ -202,6 +205,35 @@ instance ToCore I.Telescope where
   toCore I.EmptyTel = pure Core.EmptyTel
   toCore (I.ExtendTel ty t) = Core.ExtendTel <$> toCore ty <*> toCore t
 
+clauseToCore :: CC.CompiledClauses -> I.Type -> ToCoreM Core.Term
+clauseToCore (CC.Done args body) ty = toCore body
+-- careful here, argNum is the number of the argument in the given function
+-- Last thing in here is to check if there are no indices to the datatypes. How can we detect this? The type of the datatype should logically be the argNum'th
+clauseToCore (CC.Case argNum c) ty = do
+  let listConstructors = Map.toList (CC.conBranches c)
+  -- assuming there is at least one branch
+  (dt, _) <- lookupCon (fst (listConstructors !! 0))
+  corety <- toCore ty
+  let argLen = numOfArgs corety
+  -- what if here a function is defined as a lambda? example : foo x = \y -> x y. This would then think foo has 2 parameters which it does not. Actually thinking about it I think the behaviour is equivalent, we could desugar to previous notation to foo x y = x y.
+  let index = intToIndex (argLen - unArg argNum - 1)
+  branchList <- mapM (uncurry (createBranch ty)) listConstructors
+  let branches = foldr Core.BsCons Core.BsNil branchList
+  -- First arg: not idea, gotten from first branch but i wish info was available in the outer object , 
+  -- Second: the list of indices of the datatype, which we cannot access, we need to figure out why this is needed. So turns out for our current use it can only be empty, which I hope corresponds to rsingleton
+  -- Third: For now assuming it's alwasy the last argument, later on will have to do a translation from number of the arg to db index (somehow we should know arity of the function)
+  -- Fourth: the branches
+  -- Fifth: the TYPE where from
+  return $ TCase dt rsingleton (TVar index) branches corety
+clauseToCore _ _ = throwError "not supported"
+
+createBranch :: I.Type -> QName -> CC.WithArity CC.CompiledClauses -> ToCoreM Core.Branch
+createBranch ty name wthAr = do
+  (_, constructor) <- lookupCon name
+  clause <- clauseToCore (CC.content wthAr) ty
+  -- here we need to figure out what that rscope should be, best guess is that it is as long as the number of arguments-pattern in the given branch
+  return (Core.BBranch constructor rsingleton clause)
+
 
 {- ────────────────────────────────────────────────────────────────────────────────────────────── -}
 -- Defn (helper for Definition below)
@@ -218,9 +250,16 @@ toCoreDefn (I.GeneralizableVar _) _ =
 toCoreDefn (I.AbstractDefn _) _ =
   throwError "abstract definition are not supported"
 
-toCoreDefn (I.FunctionDefn def) _ =
+-- toCoreDefn (I.FunctionDefn def) ty = case def of
+--   I.FunctionData {  _funTreeless=__funTreeless, _funSplitTree=__funSplitTree, _funCompiled=__funCompiled, _funClauses=__funClauses} -> throwError $ "DEBUG:" <+> pretty __funSplitTree
+toCoreDefn (I.FunctionDefn def) ty =
   withError (\e -> multiLineText $ "function definition failure: \n" <> Pretty.render (nest 1 e)) $ do
   case def of
+  -- If _funCompiled is populated (should be all cases)
+    I.FunctionData{..}
+      | isNothing (maybeRight _funProjection >>= I.projProper) -- discard record projections
+      , Just compiledClauses      <- _funCompiled
+      -> Core.FunctionDefn <$> clauseToCore compiledClauses ty
     -- case where you use lambda
     I.FunctionData{..}
       | isNothing (maybeRight _funProjection >>= I.projProper) -- discard record projections
@@ -229,13 +268,6 @@ toCoreDefn (I.FunctionDefn def) _ =
       , Just body <- I.clauseBody cl
       -> Core.FunctionDefn <$> toCore body
     -- case with no pattern matching
-    I.FunctionData{..}
-      | isNothing (maybeRight _funProjection >>= I.projProper) -- discard record projections
-      , [cl]      <- _funClauses
-      , vars      <- I.clausePats cl
-      , Just body <- I.clauseBody cl
-      -- -> Core.FunctionDefn <$> toCore body
-      -> throwError "only definitions via λ are supported"
 
     -- case with pattern matching variables
     I.FunctionData{..}

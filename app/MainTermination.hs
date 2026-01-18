@@ -1,3 +1,4 @@
+
 module Main where
 
 import Data.Either (partitionEithers)
@@ -37,7 +38,6 @@ import Agda.Core.Syntax.Term qualified as Core
 import Agda.Core.TCM.TCM qualified as Core
 import Agda.Core.Prelude qualified as Core
 import Agda.Core.Checkers.TypeCheck (checkType)
-import Agda.Core.Checkers.Terminate (checkTermination)
 
 import Agda.Utils.Either (maybeRight)
 import Agda.Utils.Maybe (mapMaybe, isNothing, fromMaybe)
@@ -281,7 +281,7 @@ preSignatureToSignature PreSignature {preSigDefs, preSigData, preSigCons}  =  do
 
 agdaCorePostModule :: ACEnv -> ACMEnv -> IsMain -> TopLevelModuleName -> [ACSyntax] -> TCM ACMod
 agdaCorePostModule ACEnv{toCoreIsTypechecking = False} _ _ _ _ = pure ()
-agdaCorePostModule ACEnv{toCorePreSignature = ioPreSig, toCoreGlobal = ioGlobal} _ _ tlm defs = do
+agdaCorePostModule ACEnv{toCorePreSignature = ioPreSig} _ _ tlm defs = do
   reportSDoc "agda-core.check" 2 lineInDoc
   liftIO $ setSGR [ SetConsoleIntensity BoldIntensity, SetColor Foreground Vivid Cyan ]
   reportSDoc "agda-core.check" 1 . boxInDoc $ "Typechecking module " <> show (Pretty.pretty tlm)
@@ -295,16 +295,12 @@ agdaCorePostModule ACEnv{toCorePreSignature = ioPreSig, toCoreGlobal = ioGlobal}
       Right Core.Definition{ defName, theDef = Core.FunctionDefn funBody, defType } -> do
         reportSDoc "agda-core.check" 2 $ text $ "Typechecking of " <> defName <> " :"
         preSig <- liftIO $ readIORef ioPreSig
-        globalToCore <- liftIO $ readIORef ioGlobal
         let sig = preSignatureToSignature preSig
         let fl  = Core.More fl
             env = Core.MkTCEnv sig fl
-        -- case checkTermination ((globalDefs globalToCore) Map.! defName) of
-        --   False -> reportSDocFailure "agda-core.check" 3 $ text $ "  Termination checking failed"
-          -- True -> 
         case Core.runTCM (checkType CtxEmpty funBody defType) env of
-            Left err -> reportSDoc "agda-core.check" 3 $ text $ "  Type checking error: " ++ err
-            Right ok -> reportSDoc "agda-core.check" 3 $ text "  Type checking success"
+              Left err -> reportSDoc "agda-core.check" 3 $ text $ "  Type checking error: " ++ err
+              Right ok -> reportSDoc "agda-core.check" 3 $ text "  Type checking success"
       Right Core.Definition{ defName } ->
         reportSDocWarning "agda-core.check" 2 $ text $ "Skiped " <> defName <> " : not a function"
 

@@ -20,27 +20,14 @@ private variable
   @0 α : Scope Name
   @0 rβ : RScope Name
 
--- Here we create a first version of a termination checker, checks if at least one variable is always decreasing
--- Need some kind of environment when going through a term which keeps track of subterm relations through pattern matching.
--- The main termination function should be  recursive, take the name of the function being looked at, and the list of the parameters (they should all be just names)
 
-
--- Okay the function gathering the environment should patternmatch on case, and when it finds one, it establishes a relation between the variable being cased on
--- I think for now it should not be indexed on a scope, since that would require all variables to have some parent term, which is just not the case. We will need to find some other way to make it correct by construction,
--- since right now it looks really much like a normal implementation
--- data SubTermContext : @0 Scope Name → Set where
---   StCtxEmpty  : SubTermContext mempty
---   StCtxExtend : SubTermContext α → (@0 x : Name) → (@0 y : Name) → SubTermContext (α ▸ x) -- here x, is a subterm of y
-
--- So anytime a variable is added to the context, like in context for typechecking, 
--- a potential direct parent should be given to it in this environment
--- we only really care if they are subterms of parameters of the function, that might need to factor in the implementation of this
--- things probably only need to be added when pattern matching and when we have a lambda, 
--- and only in pattern matching does it result in some subterm relationship being established 
 data SubTermContext : @0 Scope Name → Set where
   StCtxEmpty  : SubTermContext mempty
   StCtxExtend : SubTermContext α → (@0 x : Name) → Maybe (NameIn α) → SubTermContext (α ▸ x) -- here x, is a subterm of y.
 {-# COMPILE AGDA2HS SubTermContext #-}
+
+mkStCtxFromScope : (α : Scope Name) → SubTermContext α
+mkStCtxFromScope  = StCtxEmpty
 
 private -- it should use a RScope instead of β and then could be public
   raiseNameIn : {@0 α β : Scope Name} → Singleton β → Maybe (NameIn α) →  Maybe (NameIn (α <> β))
@@ -84,10 +71,9 @@ opaque
   updateEnv env (Erased x ∷ s) name = updateEnv (StCtxExtend env x (Just name)) s (weakenNameIn (subWeaken subRefl) name)
   {-# COMPILE AGDA2HS updateEnv #-}
 
-{-# TERMINATING #-}
+{-# NON_TERMINATING #-} -- need to find a way to not need those
 handleBranches : ∀ {@0 d : NameData} {@0 cs : RScope (NameCon d)} → SubTermContext α → NameIn defScope → List (NameIn α) → NameIn α → (bs : Branches α d cs) → List Bool
 
-{-# TERMINATING #-}
 getDecreasingArgs : SubTermContext α → NameIn defScope → List (NameIn α) → Term α → List Bool
 
 handleBranches con funName params name BsNil = map (λ _ → True) params
@@ -102,7 +88,11 @@ handleBranches {α} con funName params name (BsCons (BBranch (c ⟨ w ⟩ ) (fie
 
 
 getDecreasingArgs con funName params (TApp u v) =  case unApps (TApp u v) of λ where
-  (fun , args) → compareArgsToParams con params args
+  (fun , args) → zipWith (λ x y → x && y) (foldr (zipWith (λ x y → x && y)) (map (λ _ → True) params) (map (getDecreasingArgs con funName params) args)) (case fun of λ where
+    (TDef d) → case (d == funName) of λ where
+     True → compareArgsToParams con params args
+     False → map (λ _ → True) params
+    x → getDecreasingArgs con funName params x)
 getDecreasingArgs con funName params (TLam name body) = 
   getDecreasingArgs (StCtxExtend con name Nothing) funName (map (weakenNameIn (subWeaken subRefl)) params) body
 getDecreasingArgs con funName params (TLet name body1 body2) = 
