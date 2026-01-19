@@ -38,6 +38,7 @@ import Agda.Core.Syntax.Context   qualified as Core
 import Agda.Core.Syntax.Signature qualified as Core
 
 import Agda.Core.UtilsH (listToUnitList, indexToNat, indexToInt, intToIndex, numOfArgs)
+import Debug.Trace
 
 
 import Scope.In (Index)
@@ -136,7 +137,14 @@ instance ToCore I.Term where
   -- TODO(flupe): add literals once they're added to core
   toCore (I.Lit l) = throwError "literals not supported"
 
-  toCore (I.Def qn es) = tApp <$> (TDef <$> lookupDefOrData qn) <*> toCore es
+  -- We need to change this so that, in the case where it is a datatype, we get a TData instead (duh)
+  toCore (I.Def qn es) = do
+    -- Try to lookup as datatype first, then as definition
+    mDataIdx <- catchError (Just <$> lookupData qn) (\_ -> pure Nothing)
+    case mDataIdx of
+      -- This is really ugly, assumes there are no indices or parameters. I think the indices are contained in es, although I do not care for now, I will create a full translation once I have a basic termiantion checker working
+      Just dtIdx -> pure $ TData dtIdx Core.TSNil Core.TSNil
+      Nothing    -> tApp <$> (TDef <$> lookupDef qn) <*> toCore es
 
   toCore (I.Con ch ci es)
     | Just args <- allApplyElims es
@@ -259,7 +267,11 @@ toCoreDefn (I.FunctionDefn def) ty =
     I.FunctionData{..}
       | isNothing (maybeRight _funProjection >>= I.projProper) -- discard record projections
       , Just compiledClauses      <- _funCompiled
-      -> Core.FunctionDefn <$> clauseToCore compiledClauses ty
+      -> do
+        corety <- toCore ty
+        body <- clauseToCore compiledClauses ty
+        let argLen = numOfArgs corety 
+        Core.FunctionDefn <$> pure ((iterate TLam body) !! argLen)
     -- case where you use lambda
     I.FunctionData{..}
       | isNothing (maybeRight _funProjection >>= I.projProper) -- discard record projections

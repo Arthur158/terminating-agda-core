@@ -10,6 +10,11 @@ import Scope.Sub (subExtScope, subJoinDrop, subRefl, subWeaken)
 data SubTermContext = StCtxEmpty
                     | StCtxExtend SubTermContext (Maybe Index)
 
+mkStCtxFromScope :: Scope -> SubTermContext
+mkStCtxFromScope [] = StCtxEmpty
+mkStCtxFromScope (() : β)
+  = StCtxExtend (mkStCtxFromScope β) Nothing
+
 raiseNameIn :: Scope -> Maybe Index -> Maybe Index
 raiseNameIn r (Just n)
   = Just (weakenNameIn (subJoinDrop r subRefl) n)
@@ -83,7 +88,8 @@ getDecreasingArgs con funName params
   = handleBranches con funName params nameVar branches
 getDecreasingArgs _ _ params _ = map (\ _ -> True) params
 
-checkTermination :: Index -> [Index] -> Term -> Bool
-checkTermination fun params term
-  = any id (getDecreasingArgs StCtxEmpty fun params term)
+checkTermination ::
+                 SubTermContext -> Index -> [Index] -> Term -> Bool
+checkTermination con fun params term
+  = any id (getDecreasingArgs con fun params term)
 

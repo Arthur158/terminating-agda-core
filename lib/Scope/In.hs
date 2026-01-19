@@ -3,6 +3,7 @@ module Scope.In where
 import Scope.Core (Scope, singleton)
 import Scope.Split (ListSplit(ConsL, ConsR, EmptyL, EmptyR), splitRefl)
 import Scope.Sub (subBindDrop, subRight)
+import GHC.Stack (HasCallStack)
 
 data Index = Zero
            | Suc Index
@@ -38,7 +39,7 @@ inRHere = Zero
 inRThere :: Index -> Index
 inRThere n = Suc n
 
-inEmptyCase :: a
+inEmptyCase :: HasCallStack => a
 inEmptyCase = error "impossible"
 
 inSingCase :: Index -> a -> a

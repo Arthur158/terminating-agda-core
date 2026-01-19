@@ -70,6 +70,8 @@ executable agda-core
         ViewPatterns
 
     ghc-options:
+        -g
+        -fprof-auto
         -Wall
         -fno-warn-unused-matches
         -fno-warn-unused-imports

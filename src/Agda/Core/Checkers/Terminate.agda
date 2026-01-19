@@ -26,8 +26,12 @@ data SubTermContext : @0 Scope Name → Set where
   StCtxExtend : SubTermContext α → (@0 x : Name) → Maybe (NameIn α) → SubTermContext (α ▸ x) -- here x, is a subterm of y.
 {-# COMPILE AGDA2HS SubTermContext #-}
 
-mkStCtxFromScope : (α : Scope Name) → SubTermContext α
-mkStCtxFromScope  = StCtxEmpty
+opaque
+  unfolding Scope
+  mkStCtxFromScope : (α : Scope Name) → SubTermContext α
+  mkStCtxFromScope [] = StCtxEmpty
+  mkStCtxFromScope (Erased x ∷ β) = StCtxExtend (mkStCtxFromScope β) x Nothing
+  {-# COMPILE AGDA2HS mkStCtxFromScope #-}
 
 private -- it should use a RScope instead of β and then could be public
   raiseNameIn : {@0 α β : Scope Name} → Singleton β → Maybe (NameIn α) →  Maybe (NameIn (α <> β))

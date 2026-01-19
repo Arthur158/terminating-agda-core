@@ -68,6 +68,7 @@ import Agda.TypeChecking.SizedTypes.WarshallSolver (Error)
 import qualified Agda.TypeChecking.Primitive as I
 import Agda.Benchmarking (Phase(Definition))
 import Agda.Compiler.JS.Compiler (global)
+import Debug.Trace
 
 {- ───────────────────────────────────────────────────────────────────────────────────────────── -}
 -- main function
@@ -266,7 +267,7 @@ agdaCoreCompile env _ _ def = do
 -- PostModule
 -- do the typechecking
 preSignatureToSignature :: PreSignature -> Core.Signature
-preSignatureToSignature PreSignature {preSigDefs, preSigData, preSigCons}  =  do
+preSignatureToSignature PreSignature {preSigDefs, preSigData, preSigCons}  = do
   let datas i  = case preSigData Map.!? indexToNat i of
         Just dt -> dt
         _ -> __IMPOSSIBLE__
@@ -293,7 +294,7 @@ agdaCorePostModule ACEnv{toCorePreSignature = ioPreSig, toCoreGlobal = ioGlobal}
     case def of
       Left n -> reportSDocFailure "agda-core.check" $ text $ "Skiped " <> n <> " :  term not compiled"
       Right Core.Definition{ defName, theDef = Core.FunctionDefn funBody, defType } -> do
-        reportSDoc "agda-core.check" 2 $ text $ "Typechecking of " <> defName <> " :"
+        reportSDoc "agda-core.check" 1 $ text $ "Typechecking of " <> defName <> " :"
         preSig <- liftIO $ readIORef ioPreSig
         globalToCore <- liftIO $ readIORef ioGlobal
         let sig = preSignatureToSignature preSig
@@ -302,6 +303,7 @@ agdaCorePostModule ACEnv{toCorePreSignature = ioPreSig, toCoreGlobal = ioGlobal}
         -- case checkTermination ((globalDefs globalToCore) Map.! defName) of
         --   False -> reportSDocFailure "agda-core.check" 3 $ text $ "  Termination checking failed"
           -- True -> 
+        reportSDoc "agda-core.check" 1 $ text $ "before TC: " <> show funBody <> " with name: " <> defName <> ", typchecking against: " <> show defType
         case Core.runTCM (checkType CtxEmpty funBody defType) env of
             Left err -> reportSDoc "agda-core.check" 3 $ text $ "  Type checking error: " ++ err
             Right ok -> reportSDoc "agda-core.check" 3 $ text "  Type checking success"

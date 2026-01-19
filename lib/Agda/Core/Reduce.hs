@@ -10,6 +10,7 @@ import Scope.In (Index, decIn, decInR, inBindCase)
 import Scope.Split (ListSplit)
 import Scope.Sub (subBindDrop, subBindKeep, subEmpty, subExtScope, subExtScopeKeep, subRefl)
 import Utils.Either (mapRight)
+import Debug.Trace
 
 data Environment = EnvNil
                  | EnvCons Environment Term
