@@ -4,38 +4,32 @@ import Agda.Core.Name ()
 import Agda.Core.Syntax.Term (Branch(BBranch), Branches(BsCons, BsNil), Term(TApp, TCase, TDef, TLam, TLet, TVar), unApps)
 import Agda.Core.Syntax.Weakening (weakenNameIn)
 import Scope.Core (RScope, Scope, singleton)
-import Scope.In (Index, inBindCase, inEmptyCase)
+import Scope.In (Index(Zero), inBindCase, inEmptyCase)
 import Scope.Sub (subExtScope, subJoinDrop, subRefl, subWeaken)
 
 data SubTermContext = StCtxEmpty
-                    | StCtxExtend SubTermContext (Maybe Index)
+                    | StCtxExtend (Maybe Index) SubTermContext
 
-mkStCtxFromScope :: Scope -> SubTermContext
-mkStCtxFromScope [] = StCtxEmpty
-mkStCtxFromScope (() : β)
-  = StCtxExtend (mkStCtxFromScope β) Nothing
-
-raiseNameIn :: Scope -> Maybe Index -> Maybe Index
-raiseNameIn r (Just n)
-  = Just (weakenNameIn (subJoinDrop r subRefl) n)
-raiseNameIn r Nothing = Nothing
+raiseNameIn :: Scope -> Index -> Index
+raiseNameIn r n = weakenNameIn (subJoinDrop r subRefl) n
 
 lookupSt :: SubTermContext -> Index -> Maybe Index
 lookupSt StCtxEmpty x = inEmptyCase
-lookupSt (StCtxExtend c nameparent) name
-  = raiseNameIn singleton
-      (inBindCase name (\ q -> lookupSt c q) nameparent)
+lookupSt (StCtxExtend nameparent c) name
+  = case inBindCase name (\ q -> lookupSt c q) nameparent of
+        Just n -> Just (raiseNameIn singleton n)
+        Nothing -> Nothing
 
 checkSubtermVar :: SubTermContext -> Index -> Index -> Bool
-checkSubtermVar ctx name iancestor
-  = case lookupSt ctx name of
-        Just iparent -> case iancestor == iparent of
-                            True -> True
-                            False -> False
+checkSubtermVar ctx param arg
+  = case lookupSt ctx arg of
+        Just parent -> case param == parent of
+                           True -> True
+                           False -> False
         Nothing -> False
 
 checkSubterm :: SubTermContext -> Index -> Term -> Bool
-checkSubterm con name (TVar name2) = checkSubtermVar con name name2
+checkSubterm con param (TVar arg) = checkSubtermVar con param arg
 checkSubterm con name term = False
 
 compareArgsToParams ::
@@ -47,7 +41,7 @@ compareArgsToParams _ _ _ = []
 updateEnv :: SubTermContext -> RScope -> Index -> SubTermContext
 updateEnv env [] _ = env
 updateEnv env (() : s) name
-  = updateEnv (StCtxExtend env (Just name)) s
+  = updateEnv (StCtxExtend (Just name) env) s
       (weakenNameIn (subWeaken subRefl) name)
 
 handleBranches ::
@@ -75,12 +69,12 @@ getDecreasingArgs con funName params (TApp u v)
                                             False -> map (\ _ -> True) params
                               x -> getDecreasingArgs con funName params x)
 getDecreasingArgs con funName params (TLam body)
-  = getDecreasingArgs (StCtxExtend con Nothing) funName
+  = getDecreasingArgs (StCtxExtend Nothing con) funName
       (map (weakenNameIn (subWeaken subRefl)) params)
       body
 getDecreasingArgs con funName params (TLet body1 body2)
   = zipWith (&&) (getDecreasingArgs con funName params body1)
-      (getDecreasingArgs (StCtxExtend con Nothing) funName
+      (getDecreasingArgs (StCtxExtend Nothing con) funName
          (map (weakenNameIn (subWeaken subRefl)) params)
          body2)
 getDecreasingArgs con funName params
@@ -90,6 +84,10 @@ getDecreasingArgs _ _ params _ = map (\ _ -> True) params
 
 checkTermination ::
                  SubTermContext -> Index -> [Index] -> Term -> Bool
-checkTermination con fun params term
-  = any id (getDecreasingArgs con fun params term)
+checkTermination c def params (TLam body)
+  = checkTermination (StCtxExtend Nothing c) def
+      (map (weakenNameIn (subWeaken subRefl)) params ++ [Zero])
+      body
+checkTermination c def params body
+  = any id (getDecreasingArgs c def params body)
 

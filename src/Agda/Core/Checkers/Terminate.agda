@@ -23,41 +23,34 @@ private variable
 
 data SubTermContext : @0 Scope Name → Set where
   StCtxEmpty  : SubTermContext mempty
-  StCtxExtend : SubTermContext α → (@0 x : Name) → Maybe (NameIn α) → SubTermContext (α ▸ x) -- here x, is a subterm of y.
+  StCtxExtend : (@0 x : Name) → Maybe (NameIn α) → SubTermContext α → SubTermContext (α ▸ x) -- here x, is a subterm of y.
 {-# COMPILE AGDA2HS SubTermContext #-}
 
-opaque
-  unfolding Scope
-  mkStCtxFromScope : (α : Scope Name) → SubTermContext α
-  mkStCtxFromScope [] = StCtxEmpty
-  mkStCtxFromScope (Erased x ∷ β) = StCtxExtend (mkStCtxFromScope β) x Nothing
-  {-# COMPILE AGDA2HS mkStCtxFromScope #-}
-
 private -- it should use a RScope instead of β and then could be public
-  raiseNameIn : {@0 α β : Scope Name} → Singleton β → Maybe (NameIn α) →  Maybe (NameIn (α <> β))
-  raiseNameIn r (Just n) = Just (weakenNameIn (subJoinDrop r subRefl) n)
-  raiseNameIn r Nothing = Nothing
+  raiseNameIn : {@0 α β : Scope Name} → Singleton β → NameIn α →  NameIn (α <> β)
+  raiseNameIn r n = weakenNameIn (subJoinDrop r subRefl) n
   {-# COMPILE AGDA2HS raiseNameIn #-}
 
 
 lookupSt : (Γ : SubTermContext α) (x : NameIn α) → Maybe (NameIn α)
 lookupSt StCtxEmpty x = nameInEmptyCase x
-lookupSt (StCtxExtend c namesubterm nameparent) name =
-    raiseNameIn (sing _) (nameInBindCase name
+lookupSt (StCtxExtend namesubterm nameparent c) name = case (nameInBindCase name
       (λ q → lookupSt c (⟨ _ ⟩ q))
-      (λ _ → nameparent))
+      (λ _ → nameparent)) of λ where
+        (Just n) → Just (raiseNameIn (sing _) n)
+        Nothing → Nothing
 {-# COMPILE AGDA2HS lookupSt #-}
 
 checkSubtermVar : SubTermContext α → NameIn α → NameIn α → Bool
-checkSubtermVar ctx name (⟨ _ ⟩ ( iancestor ⟨ _ ⟩)) = case (lookupSt ctx name) of λ where
-  (Just (⟨ _ ⟩ ( iparent ⟨ _ ⟩))) → case (iancestor == iparent) of λ where
+checkSubtermVar ctx (⟨ _ ⟩ ( param ⟨ _ ⟩)) arg = case (lookupSt ctx arg) of λ where
+  (Just (⟨ _ ⟩ ( parent ⟨ _ ⟩))) → case (param == parent) of λ where
     True → True
     False → False -- this needs eventually to check recursively
   Nothing → False
 {-# COMPILE AGDA2HS checkSubtermVar #-}
 
 checkSubterm : SubTermContext α → NameIn α → Term α → Bool
-checkSubterm con name (TVar name2) = checkSubtermVar con name name2
+checkSubterm con param (TVar arg) = checkSubtermVar con param arg
 checkSubterm con name term = False
 {-# COMPILE AGDA2HS checkSubterm #-}
 
@@ -72,7 +65,7 @@ opaque
   unfolding RScope extScope
   updateEnv : SubTermContext α → (cs : RScope Name) → NameIn α → SubTermContext (extScope α cs)
   updateEnv env [] _ = env
-  updateEnv env (Erased x ∷ s) name = updateEnv (StCtxExtend env x (Just name)) s (weakenNameIn (subWeaken subRefl) name)
+  updateEnv env (Erased x ∷ s) name = updateEnv (StCtxExtend x (Just name) env) s (weakenNameIn (subWeaken subRefl) name)
   {-# COMPILE AGDA2HS updateEnv #-}
 
 {-# NON_TERMINATING #-} -- need to find a way to not need those
@@ -98,15 +91,17 @@ getDecreasingArgs con funName params (TApp u v) =  case unApps (TApp u v) of λ 
      False → map (λ _ → True) params
     x → getDecreasingArgs con funName params x)
 getDecreasingArgs con funName params (TLam name body) = 
-  getDecreasingArgs (StCtxExtend con name Nothing) funName (map (weakenNameIn (subWeaken subRefl)) params) body
+  getDecreasingArgs (StCtxExtend name Nothing con) funName (map (weakenNameIn (subWeaken subRefl)) params) body
 getDecreasingArgs con funName params (TLet name body1 body2) = 
   zipWith (λ x y → x && y) (getDecreasingArgs con funName params body1) 
-    (getDecreasingArgs (StCtxExtend con name Nothing) funName (map (weakenNameIn (subWeaken subRefl)) params) body2)
+    (getDecreasingArgs (StCtxExtend name Nothing con) funName (map (weakenNameIn (subWeaken subRefl)) params) body2)
 getDecreasingArgs con funName params (TCase _ _ (TVar nameVar) branches _) = -- we only accept pattern matching on variable for now.
   handleBranches con funName params nameVar branches
 getDecreasingArgs _ _ params _ = map (λ _ → True) params
 {-# COMPILE AGDA2HS getDecreasingArgs #-}
 
-checkTermination : SubTermContext α → NameIn defScope → List (NameIn α) → Term α → Bool
-checkTermination con fun params term = any id (getDecreasingArgs con fun params term)
+checkTermination : SubTermContext α → NameIn defScope → List (NameIn α) → Term α → Bool
+-- unfold the function to get all the arguments and build the env
+checkTermination c def params (TLam x body) = checkTermination (StCtxExtend x Nothing c) def ((map (weakenNameIn (subWeaken subRefl)) params) ++ ((⟨ x ⟩ Zero ⟨ IsZero refl ⟩) ∷ []))  body
+checkTermination c def params body = any id (getDecreasingArgs c def params body)
 {-# COMPILE AGDA2HS checkTermination #-}

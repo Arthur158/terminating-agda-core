@@ -43,7 +43,7 @@ import Debug.Trace
 
 import Scope.In (Index)
 import Scope.In qualified as Scope
-import Scope.Core (rsingleton)
+import Scope.Core (rsingleton, rbind)
 import Agda.Utils.Either (maybeRight)
 import qualified Agda.Syntax.Common.Pretty as Pretty
 import System.IO (withBinaryFile)
@@ -240,7 +240,8 @@ createBranch ty name wthAr = do
   (_, constructor) <- lookupCon name
   clause <- clauseToCore (CC.content wthAr) ty
   -- here we need to figure out what that rscope should be, best guess is that it is as long as the number of arguments-pattern in the given branch
-  return (Core.BBranch constructor rsingleton clause)
+  -- guess we did not handle that
+  return (Core.BBranch constructor (iterate rbind [] !! CC.arity wthAr) clause)
 
 
 {- ────────────────────────────────────────────────────────────────────────────────────────────── -}

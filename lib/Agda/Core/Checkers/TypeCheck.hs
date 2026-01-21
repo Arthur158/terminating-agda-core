@@ -14,6 +14,7 @@ import Agda.Core.TCM.TCM (TCM, tcError, tcmSignature)
 import Scope.Core (RScope, caseRScope)
 import Scope.In (Index, decIn)
 import Scope.Sub (subBindDrop, subExtScope, subRefl)
+import Debug.Trace
 
 checkCoerce ::
             Context -> Term -> (Type, TyTerm) -> Type -> TCM TyTerm

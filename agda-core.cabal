@@ -26,6 +26,7 @@ library
         Agda.Core.Checkers.TypeCheck
         Agda.Core.Checkers.Terminate
         Agda.Core.Prelude
+        Agda.Core.Name
         Scope.All
         Scope.Core
         Scope.Diff
